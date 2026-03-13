@@ -49,6 +49,14 @@ case "$OS" in
     ;;
 esac
 
+# ── Desktop/headless detection ────────────────────────────────────────────────
+HAS_DESKTOP=false
+if [[ "$PLATFORM" == "macos" ]]; then
+  HAS_DESKTOP=true
+elif [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+  HAS_DESKTOP=true
+fi
+
 # ── Step 1: Check OpenClaw ────────────────────────────────────────────────────
 step "Checking OpenClaw"
 if ! command_exists openclaw; then
@@ -184,28 +192,34 @@ install_claude() {
 }
 
 codex_auth_menu() {
+  local login_hint="authenticate via 'codex login' (OpenAI account)"
+  [[ "$HAS_DESKTOP" != "true" ]] && login_hint="device auth (for headless/remote servers)"
+
   if [[ -n "${CODEX_API_KEY:-}" || -n "${OPENAI_API_KEY:-}" ]]; then
     success "API key mode already active"
     echo ""
     echo "  Choose authentication mode:"
-    echo "    [1] Normal login  — authenticate via 'codex login' (OpenAI account)"
+    echo "    [1] Normal login  — $login_hint"
     echo "    [2] Keep API key"
     echo "    [3] Re-configure API key"
     ask "  Select (1/2/3/b): " AUTH
   else
     echo ""
     echo "  Choose authentication mode:"
-    echo "    [1] Normal login  — authenticate via 'codex login' (OpenAI account)"
+    echo "    [1] Normal login  — $login_hint"
     echo "    [2] API key mode — use OPENAI_API_KEY environment variable"
     ask "  Select (1/2/b): " AUTH
   fi
 
   case "$AUTH" in
     1)
-      if [[ "$HAS_TTY" == "true" ]]; then
+      if [[ "$HAS_TTY" != "true" ]]; then
+        warn "No TTY. Run 'codex login' manually."
+      elif [[ "$HAS_DESKTOP" == "true" ]]; then
         codex login </dev/tty
       else
-        warn "No TTY. Run 'codex login' manually."
+        info "Headless environment detected, using device auth..."
+        codex login --device-auth </dev/tty
       fi
       ;;
     2)

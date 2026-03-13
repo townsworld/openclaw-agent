@@ -5,6 +5,14 @@ REPO="townsworld/openclaw-agent"
 PLUGIN_NAME="openclaw-agent"
 OPENCLAW_JSON="$HOME/.openclaw/openclaw.json"
 
+# ── Parse arguments ──────────────────────────────────────────────────────────
+UPGRADE_ONLY=false
+for arg in "$@"; do
+  case "$arg" in
+    --upgrade|-u) UPGRADE_ONLY=true ;;
+  esac
+done
+
 # ── Colors ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
@@ -286,13 +294,14 @@ show_cli_menu() {
 }
 
 # ── Step 2: Interactive CLI setup menu ───────────────────────────────────────
-step "CLI Tools Setup"
-
 INSTALL_CURSOR=false; command_exists agent && INSTALL_CURSOR=true
 INSTALL_CLAUDE=false; command_exists claude && INSTALL_CLAUDE=true
 INSTALL_CODEX=false;  command_exists codex  && INSTALL_CODEX=true
 
-if [[ "$HAS_TTY" == "true" ]]; then
+if [[ "$UPGRADE_ONLY" == "true" ]]; then
+  info "Upgrade mode: skipping CLI setup."
+elif [[ "$HAS_TTY" == "true" ]]; then
+  step "CLI Tools Setup"
   while true; do
     show_cli_menu
     ask "  Select (1/2/3/c): " MENU_CHOICE
@@ -358,12 +367,14 @@ else
   command_exists codex && [[ -z "${CODEX_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" ]] && warn "  codex login"
 fi
 
-echo ""
-[[ "$INSTALL_CURSOR" == "true" ]] && success "Cursor Agent  → enabled"
-[[ "$INSTALL_CLAUDE" == "true" ]] && success "Claude Code   → enabled"
-[[ "$INSTALL_CODEX" == "true" ]]  && success "Codex         → enabled"
-if [[ "$INSTALL_CURSOR" == "false" && "$INSTALL_CLAUDE" == "false" && "$INSTALL_CODEX" == "false" ]]; then
-  warn "No CLI tools installed. Commands won't be available until you install at least one."
+if [[ "$UPGRADE_ONLY" != "true" ]]; then
+  echo ""
+  [[ "$INSTALL_CURSOR" == "true" ]] && success "Cursor Agent  → enabled"
+  [[ "$INSTALL_CLAUDE" == "true" ]] && success "Claude Code   → enabled"
+  [[ "$INSTALL_CODEX" == "true" ]]  && success "Codex         → enabled"
+  if [[ "$INSTALL_CURSOR" == "false" && "$INSTALL_CLAUDE" == "false" && "$INSTALL_CODEX" == "false" ]]; then
+    warn "No CLI tools installed. Commands won't be available until you install at least one."
+  fi
 fi
 
 # ── Step 3: Download & install plugin files ───────────────────────────────────
@@ -401,6 +412,19 @@ for attempt in 1 2 3; do
     if [[ -n "$RELEASE_URL" ]]; then
       if [[ -n "$OLD_VERSION" && -n "$NEW_VERSION" ]]; then
         if [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
+          success "Already on latest version v${NEW_VERSION}"
+          if [[ "$HAS_TTY" == "true" ]]; then
+            ask "  Re-install anyway? (y/N): " REINSTALL
+            if [[ "$REINSTALL" != "y" && "$REINSTALL" != "Y" ]]; then
+              info "Skipping plugin update."
+              DOWNLOAD_OK="skip"
+              break
+            fi
+          else
+            info "Skipping plugin update (same version)."
+            DOWNLOAD_OK="skip"
+            break
+          fi
           info "Re-installing v${NEW_VERSION}"
         else
           info "Upgrading v${OLD_VERSION} → v${NEW_VERSION}"
@@ -420,22 +444,24 @@ for attempt in 1 2 3; do
   sleep 2
 done
 
-if [[ "$DOWNLOAD_OK" != "true" ]]; then
+if [[ "$DOWNLOAD_OK" == "skip" ]]; then
+  info "Plugin files unchanged."
+elif [[ "$DOWNLOAD_OK" == "true" ]]; then
+  mkdir -p "$EXTENSIONS_DIR"
+  if [[ -d "$INSTALL_DIR" ]]; then
+    info "Removing existing installation..."
+    rm -rf "$INSTALL_DIR"
+  fi
+
+  info "Extracting plugin..."
+  mkdir -p "$INSTALL_DIR"
+  tar -xzf "$PLUGIN_TGZ" -C "$INSTALL_DIR" --strip-components=1
+  success "Plugin files installed to $INSTALL_DIR"
+else
   error "Failed to download release after 3 attempts."
   error "Check your network or download manually: https://github.com/${REPO}/releases"
   exit 1
 fi
-
-mkdir -p "$EXTENSIONS_DIR"
-if [[ -d "$INSTALL_DIR" ]]; then
-  info "Removing existing installation..."
-  rm -rf "$INSTALL_DIR"
-fi
-
-info "Extracting plugin..."
-mkdir -p "$INSTALL_DIR"
-tar -xzf "$PLUGIN_TGZ" -C "$INSTALL_DIR" --strip-components=1
-success "Plugin files installed to $INSTALL_DIR"
 
 # ── Step 4: Configure openclaw.json ───────────────────────────────────────────
 step "Configuring plugin"
@@ -497,6 +523,9 @@ else
 fi
 
 # ── Step 5: Project setup (auto-discover + manual add) ───────────────────────
+if [[ "$UPGRADE_ONLY" == "true" ]]; then
+  info "Upgrade mode: skipping project setup."
+else
 step "Project Setup"
 
 PROJ_NAMES=()
@@ -675,23 +704,42 @@ NODEJS
 elif [[ ${#PROJ_NAMES[@]} -eq 0 ]]; then
   info "No projects added. You can configure them later in ~/.openclaw/openclaw.json"
 fi
+fi  # end of UPGRADE_ONLY check for project setup
+
+# ── Step 6: Restart Gateway ───────────────────────────────────────────────────
+if [[ "$DOWNLOAD_OK" != "skip" ]]; then
+  step "Restarting Gateway"
+  if command_exists openclaw; then
+    openclaw gateway restart 2>/dev/null || true
+    success "Gateway restarted"
+  else
+    warn "Run 'openclaw gateway restart' to load the updated plugin."
+  fi
+fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  openclaw-agent installed successfully!              ║${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
-echo ""
-echo "Usage in Feishu:"
-[[ "$INSTALL_CURSOR" == "true" ]] && echo "  /cursor <project> <prompt>    — invoke Cursor Agent"
-[[ "$INSTALL_CLAUDE" == "true" ]] && echo "  /claude <project> <prompt>    — invoke Claude Code"
-[[ "$INSTALL_CODEX" == "true" ]] && echo "  /codex  <project> <prompt>    — invoke OpenAI Codex"
-echo ""
-echo "Options:"
-echo "  --mode ask|plan|agent         — set execution mode"
-echo "  --continue                    — continue previous session"
-echo "  --resume <chatId>             — resume specific session"
-echo ""
-echo "Restart OpenClaw Gateway to load the plugin:"
-echo "  openclaw gateway restart"
+if [[ "$UPGRADE_ONLY" == "true" ]]; then
+  echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}║  openclaw-agent upgraded successfully!               ║${NC}"
+  echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
+  echo ""
+  if [[ -n "${NEW_VERSION:-}" ]]; then
+    echo "  Version: v${NEW_VERSION}"
+  fi
+else
+  echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}║  openclaw-agent installed successfully!              ║${NC}"
+  echo -e "${GREEN}╚══════════════════════════════════════════════════════╝${NC}"
+  echo ""
+  echo "Usage in Feishu:"
+  [[ "$INSTALL_CURSOR" == "true" ]] && echo "  /cursor <project> <prompt>    — invoke Cursor Agent"
+  [[ "$INSTALL_CLAUDE" == "true" ]] && echo "  /claude <project> <prompt>    — invoke Claude Code"
+  [[ "$INSTALL_CODEX" == "true" ]] && echo "  /codex  <project> <prompt>    — invoke OpenAI Codex"
+  echo ""
+  echo "Options:"
+  echo "  --mode ask|plan|agent         — set execution mode"
+  echo "  --continue                    — continue previous session"
+  echo "  --resume <chatId>             — resume specific session"
+fi
 echo ""

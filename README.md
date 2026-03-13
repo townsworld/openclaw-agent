@@ -28,6 +28,16 @@ curl -fsSL https://raw.githubusercontent.com/townsworld/openclaw-agent/main/scri
 5. 写入配置到 `~/.openclaw/openclaw.json`
 6. 自动扫描本机 git 仓库，选择要管理的项目
 
+### 更新插件
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/townsworld/openclaw-agent/main/scripts/install.sh | bash -s -- --upgrade
+```
+
+`--upgrade` 模式只更新插件代码和 SKILL，跳过 CLI 安装、认证配置和项目发现。如果本地已是最新版本，会提示并跳过。
+
+也可以不加 `--upgrade` 直接重新运行安装命令，会走完整流程。
+
 ### 一键卸载
 
 ```bash

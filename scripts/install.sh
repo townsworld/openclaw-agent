@@ -14,7 +14,7 @@ for arg in "$@"; do
 done
 
 # ── Colors ──────────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
 info()    { echo -e "${BLUE}[INFO]${NC}  $*"; }
 success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
@@ -310,26 +310,96 @@ install_codex() {
   echo ""
 }
 
+check_cursor_auth() {
+  command_exists agent || return 1
+  # No reliable auth-check command; assume OK if installed
+  return 0
+}
+
+check_claude_auth() {
+  command_exists claude || return 1
+  if [[ -n "${ANTHROPIC_BASE_URL:-}" && -n "${ANTHROPIC_AUTH_TOKEN:-}" ]]; then
+    return 0
+  fi
+  # Check openclaw.json for proxy config
+  local oc_cfg="$HOME/.openclaw/openclaw.json"
+  if [[ -f "$oc_cfg" ]]; then
+    local has_proxy
+    has_proxy=$(node -e "
+      try {
+        const c = require('$oc_cfg');
+        const cc = c?.plugins?.entries?.['openclaw-agent']?.config?.claude;
+        if (cc?.anthropicBaseUrl && cc?.anthropicAuthToken) console.log('yes');
+      } catch(e) {}
+    " 2>/dev/null || true)
+    [[ "$has_proxy" == "yes" ]] && return 0
+  fi
+  local auth_json
+  auth_json=$(timeout 5 claude auth status 2>/dev/null || true)
+  if echo "$auth_json" | grep -q '"loggedIn": *true' 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+check_codex_auth() {
+  command_exists codex || return 1
+  if [[ -n "${CODEX_API_KEY:-}" || -n "${OPENAI_API_KEY:-}" ]]; then
+    return 0
+  fi
+  # Check openclaw.json for API key config
+  local oc_cfg="$HOME/.openclaw/openclaw.json"
+  if [[ -f "$oc_cfg" ]]; then
+    local has_key
+    has_key=$(node -e "
+      try {
+        const c = require('$oc_cfg');
+        const cc = c?.plugins?.entries?.['openclaw-agent']?.config?.codex;
+        if (cc?.openaiApiKey) console.log('yes');
+      } catch(e) {}
+    " 2>/dev/null || true)
+    [[ "$has_key" == "yes" ]] && return 0
+  fi
+  local codex_auth
+  codex_auth=$(timeout 5 codex auth status 2>/dev/null || true)
+  if echo "$codex_auth" | grep -qi 'logged.in\|authenticated\|true' 2>/dev/null; then
+    return 0
+  fi
+  if [[ -f "$HOME/.codex/auth.json" || -f "$HOME/.config/codex/auth.json" ]]; then
+    return 0
+  fi
+  return 1
+}
+
 cli_status() {
-  # $1=command name, returns status string
-  if command_exists "$1"; then
-    echo -e "${GREEN}✅ installed${NC}"
-  else
+  local cmd="$1"
+  if ! command_exists "$cmd"; then
     echo -e "${YELLOW}❌ not installed${NC}"
+    return
+  fi
+  local auth_ok=false
+  case "$cmd" in
+    agent) check_cursor_auth && auth_ok=true ;;
+    claude) check_claude_auth && auth_ok=true ;;
+    codex) check_codex_auth && auth_ok=true ;;
+  esac
+  if [[ "$auth_ok" == "true" ]]; then
+    echo -e "${GREEN}✅ ready${NC}"
+  else
+    echo -e "${YELLOW}⚠️  needs auth${NC}"
   fi
 }
 
 show_cli_menu() {
   echo ""
-  echo -e "${BLUE}┌──────────────────────────────────────────┐${NC}"
-  echo -e "${BLUE}│${NC}  CLI Tools Setup                         ${BLUE}│${NC}"
-  echo -e "${BLUE}├──────────────────────────────────────────┤${NC}"
-  echo -e "${BLUE}│${NC}  [1] Cursor Agent   $(cli_status agent)      ${BLUE}│${NC}"
-  echo -e "${BLUE}│${NC}  [2] Claude Code    $(cli_status claude)      ${BLUE}│${NC}"
-  echo -e "${BLUE}│${NC}  [3] Codex          $(cli_status codex)      ${BLUE}│${NC}"
-  echo -e "${BLUE}│${NC}                                          ${BLUE}│${NC}"
-  echo -e "${BLUE}│${NC}  [c] Continue to next step               ${BLUE}│${NC}"
-  echo -e "${BLUE}└──────────────────────────────────────────┘${NC}"
+  echo -e "  ${BOLD}CLI Tools Setup${NC}"
+  echo ""
+  echo -e "  [1] Cursor Agent   $(cli_status agent)"
+  echo -e "  [2] Claude Code    $(cli_status claude)"
+  echo -e "  [3] Codex          $(cli_status codex)"
+  echo ""
+  echo -e "  [c] Continue to next step"
+  echo ""
 }
 
 # ── Step 2: Interactive CLI setup menu ───────────────────────────────────────
@@ -679,10 +749,13 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
         ;;
       m|M)
         echo ""
-        echo "  Add projects manually (empty name to stop):"
+        echo "  ── Add projects manually ──"
+        echo "  Enter project name and path. Type ${BOLD}q${NC} or leave name empty to finish."
+        echo ""
+        local manual_count=0
         while true; do
-          ask "    Project name: " MANUAL_NAME
-          [[ -z "$MANUAL_NAME" ]] && break
+          ask "    Project name (q to finish): " MANUAL_NAME
+          [[ -z "$MANUAL_NAME" || "$MANUAL_NAME" == "q" || "$MANUAL_NAME" == "Q" ]] && break
           ask "    Project path: " MANUAL_PATH
           if [[ -z "$MANUAL_PATH" ]]; then
             warn "Empty path, skipping."
@@ -692,7 +765,11 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
           FOUND_NAMES+=("$MANUAL_NAME")
           FOUND_PATHS+=("$MANUAL_PATH")
           SELECTED+=("1")
+          manual_count=$((manual_count + 1))
+          success "Added: $MANUAL_NAME → $MANUAL_PATH"
+          echo ""
         done
+        [[ $manual_count -gt 0 ]] && success "Added $manual_count project(s)." || info "No projects added."
         ;;
       c|C)
         break
@@ -725,14 +802,13 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
   done
 
 elif [[ "$HAS_TTY" == "true" ]]; then
-  # No projects auto-discovered, fall back to manual input
   echo ""
   echo "No git projects found in common directories."
-  echo "Add projects manually (empty name to finish):"
+  echo "Add projects manually. Type ${BOLD}q${NC} or leave name empty to finish."
   echo ""
   while true; do
-    ask "  Project name (e.g. myapp): " PROJ_NAME
-    [[ -z "$PROJ_NAME" ]] && break
+    ask "  Project name (q to finish): " PROJ_NAME
+    [[ -z "$PROJ_NAME" || "$PROJ_NAME" == "q" || "$PROJ_NAME" == "Q" ]] && break
     ask "  Project path (e.g. /Users/me/code/myapp): " PROJ_PATH
     if [[ -z "$PROJ_PATH" ]]; then
       warn "Empty path, skipping."
@@ -741,6 +817,8 @@ elif [[ "$HAS_TTY" == "true" ]]; then
     [[ ! -d "$PROJ_PATH" ]] && warn "Directory not found: $PROJ_PATH (adding anyway)"
     PROJ_NAMES+=("$PROJ_NAME")
     PROJ_PATHS+=("$PROJ_PATH")
+    success "Added: $PROJ_NAME → $PROJ_PATH"
+    echo ""
   done
 else
   # Non-TTY: only keep already-configured projects, don't auto-add new ones

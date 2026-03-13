@@ -20,7 +20,7 @@ export function detectProxyEnv(cfg?: ClaudeConfig): Record<string, string> | nul
  * Claude Code uses --permission-mode instead of --mode:
  *   ask   → (no flag, -p is read-only by default)
  *   plan  → --permission-mode plan
- *   agent → --permission-mode default (full read/write)
+ *   agent → --permission-mode bypassPermissions (non-interactive, no confirmation)
  */
 export function buildClaudeArgs(opts: RunOptions): { cmd: string; args: string[]; extraEnv: Record<string, string> } {
   const cliArgs: string[] = [];
@@ -36,7 +36,7 @@ export function buildClaudeArgs(opts: RunOptions): { cmd: string; args: string[]
   if (opts.mode === "plan") {
     cliArgs.push("--permission-mode", "plan");
   } else if (opts.mode === "agent") {
-    cliArgs.push("--permission-mode", "default");
+    cliArgs.push("--permission-mode", "bypassPermissions");
   }
   // ask mode: no extra flag needed, -p is read-only by default
 

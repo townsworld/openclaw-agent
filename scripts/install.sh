@@ -629,14 +629,29 @@ fi
 
 if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
   echo ""
-  echo "Found git projects on your machine:"
+  if [[ -n "$EXISTING_PROJECTS" ]]; then
+    echo "Found git projects (previously configured ones are pre-selected):"
+  else
+    echo "Found git projects — select the ones you want to manage:"
+  fi
   echo ""
 
   # Selection state: 1=selected, 0=deselected
+  # If existing config has projects, only pre-select those; otherwise default none
+  HAS_EXISTING=false
+  [[ -n "$EXISTING_PROJECTS" ]] && HAS_EXISTING=true
+
   SELECTED=()
   for i in "${!FOUND_NAMES[@]}"; do
-    # Default select all; mark already-configured ones
-    SELECTED+=("1")
+    if [[ "$HAS_EXISTING" == "true" ]]; then
+      if echo "$EXISTING_PROJECTS" | grep -qx "${FOUND_NAMES[$i]}" 2>/dev/null; then
+        SELECTED+=("1")
+      else
+        SELECTED+=("0")
+      fi
+    else
+      SELECTED+=("0")
+    fi
   done
 
   while true; do
@@ -728,14 +743,18 @@ elif [[ "$HAS_TTY" == "true" ]]; then
     PROJ_PATHS+=("$PROJ_PATH")
   done
 else
-  # Non-TTY: auto-add all discovered projects
-  if [[ ${#FOUND_NAMES[@]} -gt 0 ]]; then
-    info "Auto-discovered ${#FOUND_NAMES[@]} git projects:"
+  # Non-TTY: only keep already-configured projects, don't auto-add new ones
+  if [[ -n "$EXISTING_PROJECTS" && ${#FOUND_NAMES[@]} -gt 0 ]]; then
+    info "Keeping previously configured projects:"
     for i in "${!FOUND_NAMES[@]}"; do
-      PROJ_NAMES+=("${FOUND_NAMES[$i]}")
-      PROJ_PATHS+=("${FOUND_PATHS[$i]}")
-      info "  ${FOUND_NAMES[$i]} → ${FOUND_PATHS[$i]}"
+      if echo "$EXISTING_PROJECTS" | grep -qx "${FOUND_NAMES[$i]}" 2>/dev/null; then
+        PROJ_NAMES+=("${FOUND_NAMES[$i]}")
+        PROJ_PATHS+=("${FOUND_PATHS[$i]}")
+        info "  ${FOUND_NAMES[$i]} → ${FOUND_PATHS[$i]}"
+      fi
     done
+  elif [[ ${#FOUND_NAMES[@]} -gt 0 ]]; then
+    info "Found ${#FOUND_NAMES[@]} git projects. Configure them in ~/.openclaw/openclaw.json"
   fi
 fi
 

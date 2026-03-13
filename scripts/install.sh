@@ -66,6 +66,28 @@ if ! command_exists openclaw; then
 fi
 success "OpenClaw found: $(which openclaw)"
 
+# ── Shared helpers ────────────────────────────────────────────────────────────
+model_menu() {
+  local cli_name="$1" var_name="$2"
+  echo ""
+  echo "  $cli_name model:"
+  echo "    [1] Default (CLI decides)"
+  echo "    [2] Custom  — specify model name"
+  ask "  Select (1/2): " MODEL_CHOICE
+  case "$MODEL_CHOICE" in
+    2)
+      ask "    Model name: " CUSTOM_MODEL
+      if [[ -n "$CUSTOM_MODEL" ]]; then
+        eval "$var_name='$CUSTOM_MODEL'"
+        success "$cli_name model set to: $CUSTOM_MODEL"
+      else
+        warn "Empty value, using default."
+      fi
+      ;;
+    *) info "$cli_name will use CLI default model." ;;
+  esac
+}
+
 # ── CLI install/auth functions ────────────────────────────────────────────────
 install_cursor() {
   echo ""
@@ -97,6 +119,7 @@ install_cursor() {
       warn "Cursor CLI installed but not found in PATH. Run 'agent login' manually."
     fi
   fi
+  [[ "$HAS_TTY" == "true" ]] && command_exists agent && model_menu "Cursor Agent" CURSOR_MODEL
   echo ""
 }
 
@@ -188,6 +211,7 @@ install_claude() {
       warn "Claude Code installed but not found in PATH."
     fi
   fi
+  [[ "$HAS_TTY" == "true" ]] && command_exists claude && model_menu "Claude Code" CLAUDE_MODEL
   echo ""
 }
 
@@ -282,6 +306,7 @@ install_codex() {
       warn "Codex CLI installed but not found in PATH."
     fi
   fi
+  [[ "$HAS_TTY" == "true" ]] && command_exists codex && model_menu "Codex" CODEX_MODEL
   echo ""
 }
 
@@ -391,38 +416,10 @@ if [[ "$UPGRADE_ONLY" != "true" ]]; then
   fi
 fi
 
-# ── Model configuration ────────────────────────────────────────────────────
+# ── Model selection variables ──────────────────────────────────────────────
 CURSOR_MODEL=""
 CLAUDE_MODEL=""
 CODEX_MODEL=""
-
-model_menu() {
-  local cli_name="$1" var_name="$2"
-  echo ""
-  echo "  $cli_name model:"
-  echo "    [1] Default (CLI decides)"
-  echo "    [2] Custom  — specify model name"
-  ask "  Select (1/2): " MODEL_CHOICE
-  case "$MODEL_CHOICE" in
-    2)
-      ask "    Model name: " CUSTOM_MODEL
-      if [[ -n "$CUSTOM_MODEL" ]]; then
-        eval "$var_name='$CUSTOM_MODEL'"
-        success "$cli_name model set to: $CUSTOM_MODEL"
-      else
-        warn "Empty value, using default."
-      fi
-      ;;
-    *) info "$cli_name will use CLI default model." ;;
-  esac
-}
-
-if [[ "$UPGRADE_ONLY" != "true" && "$HAS_TTY" == "true" ]]; then
-  step "Model Configuration"
-  [[ "$INSTALL_CURSOR" == "true" ]] && model_menu "Cursor Agent" CURSOR_MODEL
-  [[ "$INSTALL_CLAUDE" == "true" ]] && model_menu "Claude Code" CLAUDE_MODEL
-  [[ "$INSTALL_CODEX" == "true" ]]  && model_menu "Codex" CODEX_MODEL
-fi
 
 # ── Step 3: Download & install plugin files ───────────────────────────────────
 step "Installing openclaw-agent plugin"

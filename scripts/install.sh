@@ -752,7 +752,7 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
         echo "  ── Add projects manually ──"
         echo "  Enter project name and path. Type ${BOLD}q${NC} or leave name empty to finish."
         echo ""
-        local manual_count=0
+        manual_count=0
         while true; do
           ask "    Project name (q to finish): " MANUAL_NAME
           [[ -z "$MANUAL_NAME" || "$MANUAL_NAME" == "q" || "$MANUAL_NAME" == "Q" ]] && break

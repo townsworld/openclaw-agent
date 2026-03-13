@@ -1,6 +1,6 @@
 # openclaw-agent
 
-[OpenClaw](https://openclaw.ai) 插件 —— 在飞书中远程调用本机 AI 编程助手，对项目代码进行分析、调试和修改。
+[OpenClaw](https://openclaw.ai) 插件 —— 在网页或飞书中用自然语言远程调用 Cursor、Claude Code、Codex CLI 进行文档编辑与代码修改。
 
 支持三大 CLI 引擎：**Cursor Agent** · **Claude Code** · **OpenAI Codex**，按需选装。
 

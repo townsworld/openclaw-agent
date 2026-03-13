@@ -26,11 +26,11 @@ export function buildCodexArgs(opts: RunOptions): { cmd: string; args: string[];
   const cliArgs: string[] = [];
 
   if (opts.resumeSessionId) {
-    cliArgs.push("exec", "resume", opts.resumeSessionId, "--json");
+    cliArgs.push("exec", "resume", opts.resumeSessionId, "--json", "--skip-git-repo-check");
   } else if (opts.continueSession) {
-    cliArgs.push("exec", "resume", "--last", "--json");
+    cliArgs.push("exec", "resume", "--last", "--json", "--skip-git-repo-check");
   } else {
-    cliArgs.push("exec", "--json");
+    cliArgs.push("exec", "--json", "--skip-git-repo-check");
   }
 
   if (opts.mode === "ask" || opts.mode === "plan") {

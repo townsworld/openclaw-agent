@@ -88,6 +88,45 @@ model_menu() {
   esac
 }
 
+# ── Create workspace ──────────────────────────────────────────────────────────
+create_workspace() {
+  echo ""
+  echo "  ── Create a new workspace ──"
+  echo "  A workspace is a folder for AI-generated content (notes, scripts, docs, etc.)"
+  echo ""
+
+  local default_name="openclaw-workspace"
+  ask "  Workspace name [${default_name}]: " WS_NAME
+  [[ -z "$WS_NAME" ]] && WS_NAME="$default_name"
+
+  local default_parent="$HOME/code"
+  [[ -d "$HOME/projects" ]] && default_parent="$HOME/projects"
+  [[ -d "$HOME/gitlab" ]] && default_parent="$HOME/gitlab"
+  [[ -d "$HOME/github" ]] && default_parent="$HOME/github"
+  local default_path="${default_parent}/${WS_NAME}"
+
+  ask "  Path [${default_path}]: " WS_PATH
+  [[ -z "$WS_PATH" ]] && WS_PATH="$default_path"
+
+  if [[ -d "$WS_PATH" ]]; then
+    info "Directory already exists: $WS_PATH"
+    if [[ ! -d "$WS_PATH/.git" ]]; then
+      info "Initializing git..."
+      git init "$WS_PATH" >/dev/null 2>&1
+    fi
+  else
+    mkdir -p "$WS_PATH"
+    git init "$WS_PATH" >/dev/null 2>&1
+    success "Created workspace: $WS_PATH"
+  fi
+
+  FOUND_NAMES+=("$WS_NAME")
+  FOUND_PATHS+=("$WS_PATH")
+  SELECTED+=("1")
+  success "Added: $WS_NAME → $WS_PATH"
+  echo ""
+}
+
 # ── CLI install/auth functions ────────────────────────────────────────────────
 install_cursor() {
   echo ""
@@ -761,8 +800,8 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
       echo -e "  [${num}] ${mark} ${FOUND_NAMES[$i]}  ${BLUE}${FOUND_PATHS[$i]}${NC}${existing_mark}"
     done
     echo ""
-    echo "  [a] Select all   [n] Select none   [m] Add manually   [c] Confirm"
-    ask "  Toggle (number) or action (a/n/m/c): " PROJ_CHOICE
+    echo "  [a] Select all   [n] Select none   [m] Add manually   [w] Create workspace   [c] Confirm"
+    ask "  Toggle (number) or action (a/n/m/w/c): " PROJ_CHOICE
 
     case "$PROJ_CHOICE" in
       a|A)
@@ -794,6 +833,9 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
           echo ""
         done
         [[ $manual_count -gt 0 ]] && success "Added $manual_count project(s)." || info "No projects added."
+        ;;
+      w|W)
+        create_workspace
         ;;
       c|C)
         break
@@ -828,21 +870,52 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
 elif [[ "$HAS_TTY" == "true" ]]; then
   echo ""
   echo "No git projects found in common directories."
-  echo -e "Add projects manually. Type ${BOLD}q${NC} or leave name empty to finish."
+  echo ""
+  echo "  [w] Create workspace — a new folder for AI-generated content (notes, scripts, etc.)"
+  echo "  [m] Add existing project manually"
+  echo "  [c] Skip for now"
   echo ""
   while true; do
-    ask "  Project name (q to finish): " PROJ_NAME
-    [[ -z "$PROJ_NAME" || "$PROJ_NAME" == "q" || "$PROJ_NAME" == "Q" ]] && break
-    ask "  Project path (e.g. /Users/me/code/myapp): " PROJ_PATH
-    if [[ -z "$PROJ_PATH" ]]; then
-      warn "Empty path, skipping."
-      continue
-    fi
-    [[ ! -d "$PROJ_PATH" ]] && warn "Directory not found: $PROJ_PATH (adding anyway)"
-    PROJ_NAMES+=("$PROJ_NAME")
-    PROJ_PATHS+=("$PROJ_PATH")
-    success "Added: $PROJ_NAME → $PROJ_PATH"
-    echo ""
+    ask "  Select (w/m/c): " NO_PROJ_CHOICE
+    case "$NO_PROJ_CHOICE" in
+      w|W)
+        create_workspace
+        for i in "${!FOUND_NAMES[@]}"; do
+          if [[ "${SELECTED[$i]}" == "1" ]]; then
+            PROJ_NAMES+=("${FOUND_NAMES[$i]}")
+            PROJ_PATHS+=("${FOUND_PATHS[$i]}")
+          fi
+        done
+        break
+        ;;
+      m|M)
+        echo ""
+        echo -e "  Enter project name and path. Type ${BOLD}q${NC} or leave name empty to finish."
+        echo ""
+        while true; do
+          ask "    Project name (q to finish): " PROJ_NAME
+          [[ -z "$PROJ_NAME" || "$PROJ_NAME" == "q" || "$PROJ_NAME" == "Q" ]] && break
+          ask "    Project path (e.g. /Users/me/code/myapp): " PROJ_PATH
+          if [[ -z "$PROJ_PATH" ]]; then
+            warn "Empty path, skipping."
+            continue
+          fi
+          [[ ! -d "$PROJ_PATH" ]] && warn "Directory not found: $PROJ_PATH (adding anyway)"
+          PROJ_NAMES+=("$PROJ_NAME")
+          PROJ_PATHS+=("$PROJ_PATH")
+          success "Added: $PROJ_NAME → $PROJ_PATH"
+          echo ""
+        done
+        break
+        ;;
+      c|C)
+        info "Skipping project setup. You can add projects later by re-running the installer."
+        break
+        ;;
+      *)
+        warn "Invalid choice. Enter w, m, or c."
+        ;;
+    esac
   done
 else
   # Non-TTY: only keep already-configured projects, don't auto-add new ones

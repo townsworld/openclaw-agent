@@ -11,7 +11,8 @@
 ### 前置条件
 
 - [OpenClaw](https://openclaw.ai) 已安装并绑定飞书
-- Node.js 18+（用于安装 Claude Code / Codex CLI）
+- Node.js 18+（安装 Claude Code / Codex CLI 需要）
+- macOS 或 Linux
 
 ### 一键安装
 
@@ -21,12 +22,22 @@ curl -fsSL https://raw.githubusercontent.com/townsworld/openclaw-agent/main/scri
 
 安装脚本会交互式引导完成以下步骤：
 
-1. 检查 OpenClaw Gateway 是否就绪
-2. 选装 CLI 工具（Cursor / Claude Code / Codex，可多选）
-3. 认证配置 —— 每个 CLI 都可以选择标准登录或代理/API Key 模式
-4. 下载插件包（从 GitHub Release 获取最新版本）
-5. 写入配置到 `~/.openclaw/openclaw.json`
-6. 自动扫描本机 git 仓库，选择要管理的项目
+| 步骤 | 内容 |
+|------|------|
+| 1. 环境检查 | 确认 OpenClaw Gateway 已就绪 |
+| 2. CLI 工具 | 交互式菜单，选装 Cursor / Claude Code / Codex（可多选） |
+| 3. 认证配置 | 每个 CLI 安装后立即引导认证（标准登录优先，代理/API Key 可选） |
+| 4. 模型选择 | 每个 CLI 认证后选择模型（使用默认或指定自定义模型） |
+| 5. 下载插件 | 从 GitHub Release 获取最新版本 |
+| 6. 写入配置 | 自动更新 `~/.openclaw/openclaw.json` |
+| 7. 项目管理 | 扫描本机 git 仓库，勾选要管理的项目 |
+| 8. 重启 Gateway | 自动重启以加载插件 |
+
+**项目选择的默认行为**：
+- 首次安装：默认全不选，用户主动勾选需要的项目
+- 重新安装：只预选之前已配置的项目，新发现的默认不选
+
+**远程/云端服务器**：Codex 登录会自动切换到 `--device-auth` 模式，无需浏览器回调。
 
 ### 更新插件
 
@@ -34,15 +45,17 @@ curl -fsSL https://raw.githubusercontent.com/townsworld/openclaw-agent/main/scri
 curl -fsSL https://raw.githubusercontent.com/townsworld/openclaw-agent/main/scripts/install.sh | bash -s -- --upgrade
 ```
 
-`--upgrade` 模式只更新插件代码和 SKILL，跳过 CLI 安装、认证配置和项目发现。如果本地已是最新版本，会提示并跳过。
+`--upgrade` 模式只更新插件代码（`dist/index.js`、`SKILL.md` 等），跳过 CLI 安装、认证、模型选择和项目管理。版本相同时会提示是否重装。
 
-也可以不加 `--upgrade` 直接重新运行安装命令，会走完整流程。
+也可以不加 `--upgrade` 重新运行安装命令，走完整流程。
 
 ### 一键卸载
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/townsworld/openclaw-agent/main/scripts/uninstall.sh | bash
 ```
+
+卸载插件文件和 `openclaw.json` 中的相关配置，不卸载 CLI 工具本身。
 
 ### 手动安装
 
@@ -71,11 +84,7 @@ tar -xzf openclaw-agent-*.tgz -C ~/.openclaw/extensions/openclaw-agent --strip-c
 }
 ```
 
-然后重启 Gateway：
-
-```bash
-openclaw gateway restart
-```
+然后重启 Gateway：`openclaw gateway restart`
 
 ---
 
@@ -91,11 +100,7 @@ openclaw gateway restart
 /codex my-backend 写一组单元测试覆盖用户注册逻辑
 ```
 
-命令格式：
-
-```
-/<engine> <project> [options] <prompt>
-```
+命令格式：`/<engine> <project> [options] <prompt>`
 
 | 部分 | 说明 |
 |------|------|
@@ -113,7 +118,7 @@ openclaw gateway restart
 
 示例：
 
-```bash
+```
 /cursor my-backend --mode ask 这个 NPE 崩溃是什么原因
 /claude my-webapp --mode agent 把登录页改成暗色主题
 /codex my-backend --continue 上次的重构还需要处理哪些文件
@@ -129,26 +134,26 @@ openclaw gateway restart
 用 claude 分析一下 my-backend 的数据库查询性能
 ```
 
+AI 会根据用户意图自动选择引擎和执行模式。如果指定的引擎不可用，会自动降级到其他可用引擎。
+
 ---
 
 ## 认证方式
 
-安装脚本中，每个 CLI 的认证菜单都会优先提供**标准登录**，其次是代理/API Key 模式。
+安装时每个 CLI 的认证菜单**标准登录优先**，代理/API Key 其次。
 
 ### Cursor Agent
 
-```bash
-agent login
-```
+标准登录：`agent login`
 
 ### Claude Code
 
 | 模式 | 说明 |
 |------|------|
-| 标准登录 | `claude login`，使用 Anthropic 账号认证 |
-| 代理模式 | 设置 `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` 环境变量，或在插件配置中指定 |
+| 标准登录（推荐） | `claude login`，使用 Anthropic 账号 |
+| 代理模式 | `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`，适用于企业内网代理 |
 
-代理配置也可写入 `openclaw.json`（适用于 LaunchAgent 等不加载 shell 环境变量的场景）：
+代理配置可写入 `openclaw.json`（适用于 LaunchAgent 等不加载 shell 环境变量的场景）：
 
 ```json
 "claude": {
@@ -161,10 +166,10 @@ agent login
 
 | 模式 | 说明 |
 |------|------|
-| 标准登录 | `codex login`，使用 OpenAI / ChatGPT 账号认证 |
-| API Key 模式 | 设置 `OPENAI_API_KEY` 环境变量，或在插件配置中指定 |
+| 标准登录（推荐） | `codex login`，桌面环境走浏览器 OAuth，云端自动走 `--device-auth` |
+| API Key 模式 | 设置 `OPENAI_API_KEY` 环境变量或在配置中指定 |
 
-API Key 配置写入 `openclaw.json`：
+API Key 写入 `openclaw.json`：
 
 ```json
 "codex": {
@@ -176,43 +181,43 @@ API Key 配置写入 `openclaw.json`：
 
 ## 配置参考
 
-所有配置项均有合理默认值，通常无需手动调整。配置位于 `~/.openclaw/openclaw.json` 的 `plugins.entries.openclaw-agent.config` 中。
+配置位于 `~/.openclaw/openclaw.json` → `plugins.entries.openclaw-agent.config`。所有配置项均有合理默认值。
 
 ### 全局
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `projects` | `{}` | 项目名 → 本机路径映射 |
+| `defaultEngine` | `cursor` | `code_agent` 工具的默认引擎 |
 | `defaultTimeoutSec` | `600` | 单次执行超时（秒）|
 | `noOutputTimeoutSec` | `120` | 无输出超时（秒）|
 | `maxConcurrent` | `3` | 最大并发进程数 |
-| `defaultEngine` | `cursor` | `code_agent` 工具的默认引擎 |
 | `enableAgentTool` | `true` | 是否注册自然语言自动调用工具 |
 
 ### Cursor
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `cursor.agentPath` | 自动检测 | CLI 可执行文件路径 |
-| `cursor.model` | CLI 默认 | 模型覆盖 |
+| `cursor.agentPath` | 自动检测 | CLI 路径 |
+| `cursor.model` | CLI 默认 | 模型覆盖（安装时可交互选择） |
 | `cursor.enableMcp` | `true` | 是否启用 MCP |
 
 ### Claude Code
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `claude.claudePath` | 自动检测 | CLI 可执行文件路径 |
-| `claude.model` | CLI 默认 | 模型覆盖 |
-| `claude.anthropicBaseUrl` | — | 代理 URL（可选）|
-| `claude.anthropicAuthToken` | — | 代理认证令牌（可选）|
+| `claude.claudePath` | 自动检测 | CLI 路径 |
+| `claude.model` | CLI 默认 | 模型覆盖（安装时可交互选择） |
+| `claude.anthropicBaseUrl` | — | 代理 URL |
+| `claude.anthropicAuthToken` | — | 代理认证令牌 |
 
 ### Codex
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `codex.codexPath` | 自动检测 | CLI 可执行文件路径 |
-| `codex.model` | CLI 默认 | 模型覆盖 |
-| `codex.openaiApiKey` | — | OpenAI API Key（可选）|
+| `codex.codexPath` | 自动检测 | CLI 路径 |
+| `codex.model` | CLI 默认 | 模型覆盖（安装时可交互选择） |
+| `codex.openaiApiKey` | — | OpenAI API Key |
 
 ---
 

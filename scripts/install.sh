@@ -391,6 +391,39 @@ if [[ "$UPGRADE_ONLY" != "true" ]]; then
   fi
 fi
 
+# ── Model configuration ────────────────────────────────────────────────────
+CURSOR_MODEL=""
+CLAUDE_MODEL=""
+CODEX_MODEL=""
+
+model_menu() {
+  local cli_name="$1" var_name="$2"
+  echo ""
+  echo "  $cli_name model:"
+  echo "    [1] Default (CLI decides)"
+  echo "    [2] Custom  — specify model name"
+  ask "  Select (1/2): " MODEL_CHOICE
+  case "$MODEL_CHOICE" in
+    2)
+      ask "    Model name: " CUSTOM_MODEL
+      if [[ -n "$CUSTOM_MODEL" ]]; then
+        eval "$var_name='$CUSTOM_MODEL'"
+        success "$cli_name model set to: $CUSTOM_MODEL"
+      else
+        warn "Empty value, using default."
+      fi
+      ;;
+    *) info "$cli_name will use CLI default model." ;;
+  esac
+}
+
+if [[ "$UPGRADE_ONLY" != "true" && "$HAS_TTY" == "true" ]]; then
+  step "Model Configuration"
+  [[ "$INSTALL_CURSOR" == "true" ]] && model_menu "Cursor Agent" CURSOR_MODEL
+  [[ "$INSTALL_CLAUDE" == "true" ]] && model_menu "Claude Code" CLAUDE_MODEL
+  [[ "$INSTALL_CODEX" == "true" ]]  && model_menu "Codex" CODEX_MODEL
+fi
+
 # ── Step 3: Download & install plugin files ───────────────────────────────────
 step "Installing openclaw-agent plugin"
 TMP_DIR="$(mktemp -d)"
@@ -486,6 +519,7 @@ CODEX_KEY="${CODEX_API_KEY:-${OPENAI_API_KEY:-}}"
 
 if [[ -f "$OPENCLAW_JSON" ]]; then
   PROXY_BASE_URL="$PROXY_BASE_URL" PROXY_AUTH_TOKEN="$PROXY_AUTH_TOKEN" CODEX_KEY="$CODEX_KEY" \
+  CURSOR_MODEL="$CURSOR_MODEL" CLAUDE_MODEL="$CLAUDE_MODEL" CODEX_MODEL="$CODEX_MODEL" \
   node --input-type=module <<'NODEJS'
 import { readFileSync, writeFileSync } from 'fs';
 
@@ -524,6 +558,27 @@ if (codexKey) {
   entry.config.codex = entry.config.codex ?? {};
   entry.config.codex.openaiApiKey = codexKey;
   console.log('Codex API key saved to plugin settings');
+}
+
+const cursorModel = process.env.CURSOR_MODEL;
+if (cursorModel) {
+  entry.config.cursor = entry.config.cursor ?? {};
+  entry.config.cursor.model = cursorModel;
+  console.log('Cursor model: ' + cursorModel);
+}
+
+const claudeModel = process.env.CLAUDE_MODEL;
+if (claudeModel) {
+  entry.config.claude = entry.config.claude ?? {};
+  entry.config.claude.model = claudeModel;
+  console.log('Claude model: ' + claudeModel);
+}
+
+const codexModel = process.env.CODEX_MODEL;
+if (codexModel) {
+  entry.config.codex = entry.config.codex ?? {};
+  entry.config.codex.model = codexModel;
+  console.log('Codex model: ' + codexModel);
 }
 
 cfg.plugins.entries['openclaw-agent'] = entry;

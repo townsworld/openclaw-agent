@@ -687,6 +687,7 @@ done
 
 # Also check already-configured projects (mark them so user knows)
 EXISTING_PROJECTS=""
+EXISTING_PROJECT_PATHS=""
 if [[ -f "$OPENCLAW_JSON" ]]; then
   EXISTING_PROJECTS=$(node -e "
     try {
@@ -695,6 +696,29 @@ if [[ -f "$OPENCLAW_JSON" ]]; then
       if(p) Object.keys(p).forEach(k=>console.log(k));
     } catch{}
   " 2>/dev/null || true)
+  EXISTING_PROJECT_PATHS=$(node -e "
+    try {
+      const c=JSON.parse(require('fs').readFileSync('$OPENCLAW_JSON','utf8'));
+      const p=c?.plugins?.entries?.['openclaw-agent']?.config?.projects;
+      if(p) Object.entries(p).forEach(([k,v])=>console.log(k+'|'+v));
+    } catch{}
+  " 2>/dev/null || true)
+fi
+
+# Merge: add configured projects not found by auto-scan
+if [[ -n "$EXISTING_PROJECT_PATHS" ]]; then
+  while IFS= read -r line; do
+    proj_name="${line%%|*}"
+    proj_path="${line#*|}"
+    already_found=false
+    for fn in "${FOUND_NAMES[@]}"; do
+      [[ "$fn" == "$proj_name" ]] && already_found=true && break
+    done
+    if [[ "$already_found" == "false" ]]; then
+      FOUND_NAMES+=("$proj_name")
+      FOUND_PATHS+=("$proj_path")
+    fi
+  done <<< "$EXISTING_PROJECT_PATHS"
 fi
 
 if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then

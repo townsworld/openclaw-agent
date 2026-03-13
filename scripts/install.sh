@@ -750,7 +750,7 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
       m|M)
         echo ""
         echo "  ── Add projects manually ──"
-        echo "  Enter project name and path. Type ${BOLD}q${NC} or leave name empty to finish."
+        echo -e "  Enter project name and path. Type ${BOLD}q${NC} or leave name empty to finish."
         echo ""
         manual_count=0
         while true; do
@@ -804,7 +804,7 @@ if [[ ${#FOUND_NAMES[@]} -gt 0 && "$HAS_TTY" == "true" ]]; then
 elif [[ "$HAS_TTY" == "true" ]]; then
   echo ""
   echo "No git projects found in common directories."
-  echo "Add projects manually. Type ${BOLD}q${NC} or leave name empty to finish."
+  echo -e "Add projects manually. Type ${BOLD}q${NC} or leave name empty to finish."
   echo ""
   while true; do
     ask "  Project name (q to finish): " PROJ_NAME
